@@ -288,17 +288,19 @@ namespace GetVincere.Company
                     if (chkFiles.Checked)
                     {
                         //UpdateCompanyFiles(_company_id);
-                        //bool _result = await UpdateCompanyDocument2(_company_id);
+
+                        //bool _result = new Task(() => { UpdateCompanyDocument2(_company_id); }).Start();
+                        bool _result =  UpdateCompanyDocument2(_company_id); 
                         //bool _result = true;
                         //UpdateCompanyDocument2(_company_id);
-                        //if (_result) { _data_result = _data_result + " |D-ok|"; }
-                        //else
-                        //{
-                        //    _data_result = "|D-x|";
-                        //    row.Cells[5].Value = _data_result;
-                        //    MessageBox.Show("An error occured, please check.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        //    return;
-                        //}
+                        if (_result) { _data_result = _data_result + " |D-ok|"; }
+                        else
+                        {
+                            _data_result = "|D-x|";
+                            row.Cells[5].Value = _data_result;
+                            MessageBox.Show("An error occured, please check.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
 
                     }
 
@@ -346,72 +348,61 @@ namespace GetVincere.Company
            
         }
 
-        public async Task<bool> UpdateCompanyDocument2(int _companyid)
+        public bool UpdateCompanyDocument2(int _companyid)
         {
             try
             {
-
+                //14571
                 string _url = ConstantVincere.apiURL + ConstantVincere.GetCompanyEndpoint + _companyid.ToString() + "/files";
+                //string _url = ConstantVincere.apiURL + ConstantVincere.GetCompanyEndpoint + "14571" + "/files";
+                HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, _url);
 
-                using (HttpClient client = new HttpClient())
+                request.Headers.Add("X-HTTP-Method-Override", "GET");
+                request.Headers.Add("X-Method-Override", "GET");
+
+                request.Headers.Add("x-api-key", ConstantVincere.ApiKEY);
+                request.Headers.Add("id-token", ConstantVincere.TokedId);
+
+                request.Headers.UserAgent.ParseAdd("PostmanRuntime/7.51.1");
+                request.Headers.Accept.ParseAdd("application/json");
+
+                // 5. JSON Content-Type body
+                request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+
+                HttpClient client = new HttpClient();
+
+                HttpResponseMessage _response =  client.SendAsync(request).GetAwaiter().GetResult();
+
+                string responseBody = _response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                if (_response.IsSuccessStatusCode)
                 {
-                    client.DefaultRequestHeaders.Clear();
-
-                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-                    client.DefaultRequestHeaders.Add("x-api-key", ConstantVincere.ApiKEY);
-                    client.DefaultRequestHeaders.Add("id-token", ConstantVincere.TokedId);
-
-               
-                        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, _url);
-
-                        request.Content = new StringContent(string.Empty, Encoding.UTF8, "application/json");
-
-                        HttpResponseMessage _response = await client.SendAsync(request);
-
-                        string _value = await _response.Content.ReadAsStringAsync();
-
-                        if (_response.IsSuccessStatusCode)
+                    var _value = _response.Content.ReadAsStringAsync().Result.ToString();
+                    if (_value == "") { return true; }
+                    List<vinCompany_document_model> _obj = new List<vinCompany_document_model>();
+                    _obj = JsonConvert.DeserializeObject<List<vinCompany_document_model>>(_value);
+                    foreach (vinCompany_document_model _edu in _obj)
+                    {
+                        CompanyRepository _repo = new CompanyRepository();
+                        bool _result = _repo.ManageVinCompanyDocument(_companyid, _edu);
+                        if (!_result)
                         {
-                            if (string.IsNullOrEmpty(_value))
-                            {
-                                return true;
-                            }
-
-                            List<vinCompany_document_model> _obj =JsonConvert.DeserializeObject<List<vinCompany_document_model>>(_value);
-
-                            CompanyRepository _repo = new CompanyRepository();
-
-                            foreach (vinCompany_document_model _edu in _obj)
-                            {
-                                bool _result = _repo.ManageVinCompanyDocument(_companyid, _edu);
-
-                                if (!_result) { return false; }
-                            }
-
-                            return true;
+                            return false;
                         }
-                        else
-                        {
-                            MessageBox.Show(_value);
-
-                            if (_response.StatusCode == HttpStatusCode.Unauthorized)
-                            {
-                                MessageBox.Show("Request Unauthorized, kindly update your ID-TOKEN","Error",MessageBoxButtons.OK,MessageBoxIcon.Information);
-
-                                return false;
-                            }
-                            else if (_response.StatusCode == HttpStatusCode.NotFound)
-                            {
-                                return true;
-                            }
-                            else
-                            {
-                                return false;
-                            }
-                        }
-               
                     }
+
+                    return true;
+                }
+                else
+                {
+                    if (_response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        MessageBox.Show("Request Anauthorized, kindly update your ID-TOKEN", "Error", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return false;
+                    }
+                    else if (_response.StatusCode == System.Net.HttpStatusCode.NotFound) { return true; }
+                    else { return false; }
+                }
+                    
             }
             catch (Exception ex)
             {
